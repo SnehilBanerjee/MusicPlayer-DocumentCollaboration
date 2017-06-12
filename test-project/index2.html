@@ -1,0 +1,215 @@
+<!doctype html>
+<meta charset="utf-8">
+<style type="text/css">
+@font-face {
+  font-family: 'Droid Sans';
+  font-style: normal;
+  font-weight: bold;
+  src: local('Droid Sans'), url('http://playground.html5rocks.com/samples/html5_misc/Droid_Sans.ttf') format('truetype');
+}
+
+#instructions {
+  display: block;
+  position: absolute;
+  width: 100%;
+  text-align: center;
+  top: 50%;
+  margin-top: -100px;
+  font-family: 'Droid Sans';
+  color: #fff;
+}
+
+#bottom-bar {
+  position: absolute;
+  bottom: 20px;
+  left: 10px;
+  height: 160px;
+  font-family: 'Droid Sans'; 
+  color: #fff;  
+}
+
+#info {
+  float: left;
+}
+
+#info a {
+  color: #ddd;
+}
+
+#container {
+  display: block;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: crimson;
+}
+
+#canvas-container {
+  width: 600px;
+  height: 600px;
+  margin: auto;
+  position: relative;
+  top: 50%;
+  margin-top: -263px;
+  margin-right:-61px;
+}
+#canvas-copy {
+  opacity: 0.05;
+  -webkit-transform: scaleY(-1);
+  margin-top: -6px;
+}
+</style>
+<html>
+<head>
+   <title>Audio player with demo</title>
+   <script>
+     (function() {
+  var requestAnimationFrame = window.requestAnimationFrame || window.mozRequestAnimationFrame ||
+                              window.webkitRequestAnimationFrame || window.msRequestAnimationFrame;
+  window.requestAnimationFrame = requestAnimationFrame;
+})();
+
+window.onload = function() {
+  var element = document.getElementById('container')
+  dropAndLoad(element, init, "ArrayBuffer")
+}
+
+
+// Reusable dropAndLoad function: it reads a local file dropped on a
+// `dropElement` in the DOM in the specified `readFormat`
+// (In this case, we want an arrayBuffer)
+function dropAndLoad(dropElement, callback, readFormat) {
+  var readFormat = readFormat || "DataUrl"
+
+  dropElement.addEventListener('dragover', function(e) {
+    e.stopPropagation()
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'copy'
+  }, false)
+
+  dropElement.addEventListener('drop', function(e) {
+    e.stopPropagation()
+    e.preventDefault()
+    loadFile(e.dataTransfer.files[0])
+  }, false) 
+
+  function loadFile(files) {
+    var file = files
+    var reader = new FileReader()
+    reader.onload = function(e) {
+      callback(e.target.result)
+    }
+    reader['readAs'+readFormat](file)
+  }
+}
+
+// Once the file is loaded, we start getting our hands dirty.
+function init(arrayBuffer) {
+  document.getElementById('instructions').innerHTML = 'Loading please wait for 5 sec'
+  // Create a new `audioContext` and its `analyser`
+  window.audioCtx = new AudioContext()
+  window.analyser = audioCtx.createAnalyser()
+  // If a sound is still playing, stop it.
+  if (window.source)
+    source.noteOff(0)
+  // Decode the data in our array into an audio buffer
+  audioCtx.decodeAudioData(arrayBuffer, function(buffer) {
+    // Use the audio buffer with as our audio source
+    window.source = audioCtx.createBufferSource()   
+    source.buffer = buffer
+    // Connect to the analyser ...
+    source.connect(analyser)
+    // and back to the destination, to play the sound after the analysis.
+    analyser.connect(audioCtx.destination)
+    // Start playing the buffer.
+    source.start(0)
+    // Initialize a visualizer object
+    var viz = new simpleViz()
+    // Finally, initialize the visualizer.
+    new visualizer(viz['update'], analyser)
+    document.getElementById('instructions').innerHTML = ''
+  })
+}
+
+// The visualizer object. 
+// Calls the `visualization` function every time a new frame
+// is available.
+// Is passed an `analyser` (audioContext analyser).
+function visualizer(visualization, analyser) {
+  var self = this
+  this.visualization = visualization  
+  var last = Date.now()
+  var loop = function() {
+    var dt = Date.now() - last
+    // we get the current byteFreq data from our analyser
+    var byteFreq = new Uint8Array(analyser.frequencyBinCount)
+    analyser.getByteFrequencyData(byteFreq)
+    last = Date.now()
+    // We might want to use a delta time (`dt`) too for our visualization.
+    self.visualization(byteFreq, dt)
+    requestAnimationFrame(loop)
+  }
+  requestAnimationFrame(loop)
+}
+
+// A simple visualization. Its update function illustrates how to use 
+// the byte frequency data from an audioContext analyser.
+function simpleViz(canvas) {
+  var self = this
+  this.canvas = document.getElementById('canvas')
+  this.ctx = this.canvas.getContext("2d")
+  this.copyCtx = document.getElementById('canvas-copy').getContext("2d")
+  this.ctx.fillStyle = '#fff' 
+  this.barWidth = 10
+  this.barGap = 4
+  // We get the total number of bars to display
+  this.bars = Math.floor(this.canvas.width / (this.barWidth + this.barGap))
+  // This function is launched for each frame, together with the byte frequency data.
+  this.update = function(byteFreq) {
+    self.ctx.clearRect(0, 0, self.canvas.width, self.canvas.height)
+    // We take an element from the byteFreq array for each of the bars.
+    // Let's pretend our byteFreq contains 20 elements, and we have five bars...
+    var step = Math.floor(byteFreq.length / self.bars)
+    // `||||||||||||||||||||` elements
+    // `|   |   |   |   |   ` elements we'll use for our bars
+    for (var i = 0; i < self.bars; i ++) {
+      // Draw each bar
+      var barHeight = byteFreq[i*step]
+      self.ctx.fillRect(
+        i * (self.barWidth + self.barGap), 
+        self.canvas.height - barHeight, 
+        self.barWidth, 
+        barHeight)
+      self.copyCtx.clearRect(0, 0, self.canvas.width, self.canvas.height)
+      self.copyCtx.drawImage(self.canvas, 0, 0)
+    }
+  }
+}
+
+
+
+   </script>
+  
+    
+</head>
+
+<body>
+  <div id="container">  
+    <div id="canvas-container">
+      <canvas width=600 height=300 id="canvas"></canvas>
+      <canvas width=600 height=300 id="canvas-copy"></canvas>
+    </div>
+    <div id="instructions">
+      <h2>
+        Drag an audio file to play it.
+      </h2>
+    </div>
+    <div id="bottom-bar">
+      <div id="button">
+      </div>
+    </div>
+  </div>
+</body>
+</html>
